@@ -1,4 +1,4 @@
-function submit(partId)
+function submit(partId, webSubmit)
 %SUBMIT Submit your code and output to the ml-class servers
 %   SUBMIT() will connect to the ml-class server and submit your solution
 
@@ -7,7 +7,11 @@ function submit(partId)
   if ~exist('partId', 'var') || isempty(partId)
     partId = promptPart();
   end
-  
+
+  if ~exist('webSubmit', 'var') || isempty(webSubmit)
+    webSubmit = 0; % submit directly by default 
+  end
+
   % Check valid partId
   partNames = validParts();
   if ~isValidPartId(partId)
@@ -16,7 +20,7 @@ function submit(partId)
     fprintf('!! Submission Cancelled\n');
     return
   end
-  
+
   if ~exist('ml_login_data.mat','file')
     [login password] = loginPrompt();
     save('ml_login_data.mat','login','password');
@@ -25,7 +29,7 @@ function submit(partId)
     [login password] = quickLogin(login, password);
     save('ml_login_data.mat','login','password');
   end
-  
+
   if isempty(login)
     fprintf('!! Submission Cancelled\n');
     return
@@ -35,7 +39,7 @@ function submit(partId)
   if exist('OCTAVE_VERSION') 
     fflush(stdout);
   end
-  
+
   % Setup submit list
   if partId == numel(partNames) + 1
     submitParts = 1:numel(partNames);
@@ -45,35 +49,64 @@ function submit(partId)
 
   for s = 1:numel(submitParts)
     thisPartId = submitParts(s);
-    [login, ch, signature, auxstring] = getChallenge(login, thisPartId);
-    if isempty(login) || isempty(ch) || isempty(signature)
-      % Some error occured, error string in first return element.
-      fprintf('\n!! Error: %s\n\n', login);
-      return
-    end
+    if (~webSubmit) % submit directly to server
+      [login, ch, signature, auxstring] = getChallenge(login, thisPartId);
+      if isempty(login) || isempty(ch) || isempty(signature)
+        % Some error occured, error string in first return element.
+        fprintf('\n!! Error: %s\n\n', login);
+        return
+      end
 
-    % Attempt Submission with Challenge
-    ch_resp = challengeResponse(login, password, ch);
+      % Attempt Submission with Challenge
+      ch_resp = challengeResponse(login, password, ch);
 
-    [result, str] = submitSolution(login, ch_resp, thisPartId, ...
-           output(thisPartId, auxstring), source(thisPartId), signature);
+      [result, str] = submitSolution(login, ch_resp, thisPartId, ...
+             output(thisPartId, auxstring), source(thisPartId), signature);
 
-    partName = partNames{thisPartId};
+      partName = partNames{thisPartId};
 
-    fprintf('\n== [ml-class] Submitted Assignment %s - Part %d - %s\n', ...
-      homework_id(), thisPartId, partName);
-    fprintf('== %s\n', strtrim(str));
+      fprintf('\n== [ml-class] Submitted Assignment %s - Part %d - %s\n', ...
+        homework_id(), thisPartId, partName);
+      fprintf('== %s\n', strtrim(str));
 
-    if exist('OCTAVE_VERSION')
-      fflush(stdout);
+      if exist('OCTAVE_VERSION')
+        fflush(stdout);
+      end
+    else
+      [result] = submitSolutionWeb(login, thisPartId, output(thisPartId), ...
+                            source(thisPartId));
+      result = base64encode(result);
+
+      fprintf('\nSave as submission file [submit_ex%s_part%d.txt (enter to accept default)]:', ...
+        homework_id(), thisPartId);
+      saveAsFile = input('', 's');
+      if (isempty(saveAsFile))
+        saveAsFile = sprintf('submit_ex%s_part%d.txt', homework_id(), thisPartId);
+      end
+
+      fid = fopen(saveAsFile, 'w');
+      if (fid)
+        fwrite(fid, result);
+        fclose(fid);
+        fprintf('\nSaved your solutions to %s.\n\n', saveAsFile);
+        fprintf(['You can now submit your solutions through the web \n' ...
+                 'form in the programming exercises. Select the corresponding \n' ...
+                 'programming exercise to access the form.\n']);
+
+      else
+        fprintf('Unable to save to %s\n\n', saveAsFile);
+        fprintf(['You can create a submission file by saving the \n' ...
+                 'following text in a file: (press enter to continue)\n\n']);
+        pause;
+        fprintf(result);
+      end
     end
   end
-  
 end
 
 % ================== CONFIGURABLES FOR EACH HOMEWORK ==================
 
-function id = homework_id() 
+function id = homework_id()
   id = '1';
 end
 
@@ -126,7 +159,7 @@ end
 
 % ***************** REMOVE -staging WHEN YOU DEPLOY *********************
 function url = site_url()
-  url = 'http://class.coursera.org/ml-004';
+  url = 'http://class.coursera.org/ml-007';
 end
 
 function url = challenge_url()
@@ -166,8 +199,7 @@ function ret = isValidPartId(partId)
 end
 
 function partId = promptPart()
-  fprintf('== Select which part(s) to submit:\n', ...
-          homework_id());
+  fprintf('== Select which part(s) to submit:\n');
   partNames = validParts();
   srcFiles = sources();
   for i = 1:numel(partNames)
@@ -201,6 +233,16 @@ function [email,ch,signature,auxstring] = getChallenge(email, part)
   auxstring = getfield(r, 'challenge_aux_data');
 end
 
+function [result, str] = submitSolutionWeb(email, part, output, source)
+
+  result = ['{"assignment_part_sid":"' base64encode([homework_id() '-' num2str(part)], '') '",' ...
+            '"email_address":"' base64encode(email, '') '",' ...
+            '"submission":"' base64encode(output, '') '",' ...
+            '"submission_aux":"' base64encode(source, '') '"' ...
+            '}'];
+  str = 'Web-submission';
+end
+
 function [result, str] = submitSolution(email, ch_resp, part, output, ...
                                         source, signature)
 
@@ -212,7 +254,7 @@ function [result, str] = submitSolution(email, ch_resp, part, output, ...
             'state', signature};
 
   str = urlread(submit_url(), 'post', params);
- 
+
   % Parse str to read for success / failure
   result = 0;
 
@@ -236,7 +278,8 @@ function [login password] = basicPrompt()
 end
 
 function [login password] = quickLogin(login,password)
-  cont_token = input(['You are currently logged in as ' login '.\nIs this you? (y/n - type n to reenter password)'],'s');
+  disp(['You are currently logged in as ' login '.']);
+  cont_token = input('Is this you? (y/n - type n to reenter password)','s');
   if(isempty(cont_token) || cont_token(1)=='Y'||cont_token(1)=='y')
     return;
   else
