@@ -64,32 +64,47 @@ Theta2_grad = zeros(size(Theta2));
 
 X = [ones(m,1) X];
 
-z1 = X*Theta1';
+z2 = X*Theta1';
 
-a2 = sigmoid(z1);
+a2 = sigmoid(z2);
 
 a2 = [ones(m,1),a2];
 
-z2 = a2*Theta2';
+z3 = a2*Theta2';
 
-for 
+a3 = sigmoid(z3);
 
-for i = 1:num_labels
-    J = (1/m)*
+% initialze Y, matrix of y values converted to Logical vectors
+Y = zeros(m,num_labels);
 
+for i = 1:m
+    Y(i,y(i)) = 1;
+end
 
+J = 0;
+% main cost function -Note cannot be implemented as Matrix multiplication
+% :(
+for i = 1:m
+    J = J + (1/m)*(-Y(i,:)*log(a3(i,:)')-(1-Y(i,:))*log(1-a3(i,:)'));
+end
 
+T1 = Theta1(:,2:end);
+T1 = T1.^2;
 
+T2 = Theta2(:,2:end);
+T2 = T2.^2;
 
+% Regularization
+J = J + (lambda/(2*m))*(sum(T1(:))+sum(T2(:)));
 
+delta_3 = a3 - Y;
 
+delta_2 = delta_3*Theta2(:,2:end).*sigmoidGradient(z2);
 
-
-
-
-
-
-
+Theta2_grad = (1/m)*(delta_3'*a2);
+Theta2_grad(:,2:end) =  Theta2_grad(:,2:end) + (lambda/m)*Theta2(:,2:end);
+Theta1_grad = (1/m)*(delta_2'*X);
+Theta1_grad(:,2:end) =  Theta1_grad(:,2:end) + (lambda/m)*Theta1(:,2:end);
 
 % -------------------------------------------------------------
 
@@ -99,4 +114,6 @@ for i = 1:num_labels
 grad = [Theta1_grad(:) ; Theta2_grad(:)];
 
 
+
+    
 end
