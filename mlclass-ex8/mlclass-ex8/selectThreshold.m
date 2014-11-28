@@ -24,13 +24,20 @@ for epsilon = min(pval):stepsize:max(pval)
     %       of 0's and 1's of the outlier predictions
 
 
+    % True positives - probability of point is less than epsilon, point is
+    % correctly classified as anomaly
+    tp = sum(pval < epsilon & yval==1);
+    % False positives - probability of point is less than epsilon, point is
+    % incorrectly identified as anomaly
+    fp = sum(pval < epsilon & yval==0);
+    % False negatives - probability of point is larger than epsilon, point is
+    % in fact an anomaly, but identified as normal
+    fn = sum(pval > epsilon & yval==1);
+    
+    prec = tp/(tp+fp);
+    rec = tp/(tp+fn);
 
-
-
-
-
-
-
+    F1 = 2*prec*rec/(prec+rec);
 
 
 
